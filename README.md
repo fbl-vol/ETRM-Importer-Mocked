@@ -1,14 +1,24 @@
 # ETRM Importer - Mocked Implementation
 
-A complete, dockerized C# solution demonstrating a microservices-based ETRM (Energy Trading and Risk Management) system with mocked data import, normalization, and position aggregation.
+A complete, dockerized C# solution demonstrating a microservices-based ETRM (Energy Trading and Risk Management) system with mocked data import, normalization, and position aggregation. **Now featuring full observability with distributed tracing, metrics, and structured logging!**
 
 ## Overview
 
 This system consists of three separable C# services:
 
-1. **ETRM.Importer.Mock** - Generates mocked ETRM export files, uploads them to S3-compatible object storage (MinIO locally, Hetzner S3 in production), and publishes import events via NATS
+1. **ETRM.Importer.Mock** - **Continuous service** that realistically generates and publishes trade data throughout the day and EOD prices once daily. Uploads to S3-compatible object storage (MinIO locally, Hetzner S3 in production), and publishes import events via NATS
 2. **ETRM.Normalizer** - Consumes import events, downloads raw files from S3, normalizes/parses data into domain DTOs, and persists them to TimescaleDB
 3. **ETRM.PositionAggregator** - Aggregates trades into positions and persists them to TimescaleDB
+
+### ✨ Key Features
+
+- **Realistic Trade Generation**: Continuous mock trade generation with configurable intervals and batch sizes
+- **Business Hours Pattern**: Increased trade frequency during business hours (8:00-17:00 UTC)
+- **Daily EOD Prices**: End-of-day settlement prices published once per day at 16:00 UTC
+- **Full Observability**: Complete telemetry stack with Tempo, Prometheus, Loki, and Grafana
+- **Distributed Tracing**: Track requests across services with OpenTelemetry
+- **Metrics Collection**: Monitor trade generation, file uploads, and event publishing
+- **Structured Logging**: JSON-formatted logs for easy querying in Loki
 
 ## Architecture
 
@@ -73,6 +83,11 @@ This will start:
 - **NATS** on port 4222
 - **MinIO** on ports 9000 (API) and 9001 (Console)
 - **Adminer** on port 8080 for database administration
+- **Tempo** on port 3200 (distributed tracing backend)
+- **Prometheus** on port 9090 (metrics collection)
+- **Loki** on port 3100 (log aggregation)
+- **Grafana** on port 3000 (observability dashboards)
+- **OpenTelemetry Collector** on port 4317/4318 (telemetry pipeline)
 
 ### 2. Create MinIO Bucket
 
@@ -92,7 +107,7 @@ cd src/ETRM.Normalizer
 dotnet run
 ```
 
-**Terminal 2 - Run the Importer:**
+**Terminal 2 - Run the Importer (Continuous Service):**
 
 ```bash
 cd src/ETRM.Importer.Mock
@@ -100,10 +115,13 @@ dotnet run
 ```
 
 The importer will:
-- Read sample files from `samples/` directory
-- Upload them to MinIO S3
+- Run continuously, generating realistic mock trade data
+- Generate trades at random intervals (configurable, default 30-300 seconds)
+- Generate smaller batches during off-hours, larger during business hours
+- Generate EOD prices once per day at 16:00 UTC
+- Upload all generated data to MinIO S3
 - Publish import events to NATS
-- Exit when complete
+- Send telemetry (traces, metrics, logs) to the observability stack
 
 The normalizer will:
 - Listen for import events
@@ -155,26 +173,86 @@ Or use Adminer at http://localhost:8080:
 - Password: postgres
 - Database: etrm
 
+### 5. Access Observability Dashboards
+
+**Grafana** - http://localhost:3000
+- Pre-configured with Tempo, Prometheus, and Loki datasources
+- View distributed traces, metrics dashboards, and logs
+- No login required (anonymous access enabled for development)
+
+**Prometheus** - http://localhost:9090
+- Query and explore metrics directly
+- View targets and their health status
+
+**Tempo** - http://localhost:3200
+- Direct access to trace backend (typically accessed via Grafana)
+
+## Observability Features
+
+### Distributed Tracing (Tempo)
+
+Every operation is instrumented with OpenTelemetry spans:
+- Trade generation and batch processing
+- File uploads to S3
+- Event publishing to NATS
+- EOD price generation
+
+View traces in Grafana to see the complete flow of each operation with timing information.
+
+### Metrics (Prometheus)
+
+The following metrics are collected:
+- `etrm.trades.generated` - Number of trades generated
+- `etrm.prices.generated` - Number of EOD prices generated
+- `etrm.files.uploaded` - Number of files uploaded to S3
+- `etrm.events.published` - Number of events published to NATS
+- `etrm.file.upload.duration` - Duration of S3 upload operations
+- `etrm.event.publish.duration` - Duration of NATS publish operations
+- `etrm.file.size` - Size of uploaded files in bytes
+- `etrm.trade.batch.size` - Number of trades per batch
+
+Access metrics in Prometheus or create custom dashboards in Grafana.
+
+### Structured Logging (Loki)
+
+All logs are structured using Serilog with JSON formatting:
+- Easily queryable in Grafana with Loki
+- Correlated with traces using trace IDs
+- Contains contextual information like ImportId, FileType, etc.
+
+Query logs in Grafana using LogQL, for example:
+```logql
+{service_name="ETRM.Importer.Mock"} |= "Generating"
+```
+
 ## Project Structure
 
 ```
 .
-├── docker-compose.yml           # Infrastructure services
+├── docker-compose.yml           # Infrastructure services (including observability stack)
 ├── sql/
 │   └── init.sql                 # TimescaleDB schema initialization
 ├── samples/
-│   ├── sample-trades.csv        # Sample trade data
-│   └── sample-eod-prices.csv    # Sample EOD price data
+│   ├── sample-trades.csv        # Sample trade data (for reference)
+│   └── sample-eod-prices.csv    # Sample EOD price data (for reference)
+├── observability/               # Observability configuration
+│   ├── tempo.yaml              # Tempo (tracing) configuration
+│   ├── prometheus.yml          # Prometheus (metrics) configuration
+│   ├── loki.yaml               # Loki (logs) configuration
+│   ├── grafana-datasources.yml # Grafana datasource provisioning
+│   └── otel-collector-config.yaml # OpenTelemetry Collector configuration
 └── src/
     ├── Shared/                  # Shared library
     │   ├── DTOs/               # Domain objects (Trade, EndOfDaySettlementPrice, Position)
     │   └── Events/             # Event contracts (RawImportedEvent, etc.)
     ├── Infrastructure/         # Infrastructure library
     │   ├── Configuration/      # Configuration options
-    │   ├── S3/                 # S3 client wrapper
-    │   ├── NATS/               # NATS publisher/subscriber
+    │   ├── Observability/      # Telemetry (ActivitySource, Meter)
+    │   ├── S3/                 # S3 client wrapper (instrumented)
+    │   ├── NATS/               # NATS publisher/subscriber (instrumented)
     │   └── Database/           # Repository implementations
-    ├── ETRM.Importer.Mock/     # Import service
+    ├── ETRM.Importer.Mock/     # Continuous import service
+    │   └── Services/           # TradeGenerator, PriceGenerator
     ├── ETRM.Normalizer/        # Normalization service
     └── ETRM.PositionAggregator/ # Aggregation service
 ```
@@ -197,6 +275,27 @@ S3__ForcePathStyle=true
 **NATS Configuration:**
 ```bash
 NATS__Url=nats://localhost:4222
+```
+
+**Observability Configuration:**
+```bash
+Observability__ServiceName=ETRM.Importer.Mock
+Observability__ServiceVersion=1.0.0
+Observability__OtlpEndpoint=http://localhost:4317
+Observability__EnableTracing=true
+Observability__EnableMetrics=true
+Observability__EnableLogging=true
+```
+
+**Importer Worker Configuration:**
+```bash
+ImporterWorker__MinTradeIntervalSeconds=30
+ImporterWorker__MaxTradeIntervalSeconds=300
+ImporterWorker__MinTradesPerBatch=1
+ImporterWorker__MaxTradesPerBatch=10
+ImporterWorker__EodPricePublishHour=16
+ImporterWorker__UseBusinessHoursPattern=true
+ImporterWorker__BusinessHoursFrequencyMultiplier=0.5
 ```
 
 **Database Configuration:**
@@ -286,18 +385,44 @@ dotnet build
 
 ### Testing Locally
 
-The system includes sample CSV files in the `samples/` directory that are automatically imported when running the importer.
+The importer now runs as a continuous service generating realistic mock data:
+- Trades are generated throughout the day at random intervals
+- EOD prices are generated once per day at 16:00 UTC
+- All data generation is observable through Grafana dashboards
+- Sample CSV files in `samples/` directory are provided for reference only
+
+### Customizing Mock Data Generation
+
+Adjust the `ImporterWorker` configuration in `appsettings.json` to control:
+- Trade generation frequency (min/max intervals)
+- Batch size ranges
+- EOD price publication time
+- Business hours pattern activation
 
 ## Production Considerations
 
+### Infrastructure
 - Use Hetzner S3 for object storage
 - Implement proper secret management (Azure Key Vault, AWS Secrets Manager, etc.)
 - Add authentication/authorization
 - Implement proper error handling and retry logic
-- Add monitoring and alerting
 - Consider scaling NATS with JetStream for persistence
 - Set up TimescaleDB replication for high availability
-- Add comprehensive logging with structured logging (Serilog, etc.)
+
+### Observability
+- **Already Implemented**: Full observability stack with Tempo, Prometheus, and Loki
+- Configure persistent storage for observability data in production
+- Set up retention policies for traces, metrics, and logs
+- Create production-ready Grafana dashboards and alerts
+- Configure alerting rules in Prometheus for critical metrics
+- Set up log aggregation and archival for compliance
+- Consider using managed observability services (Grafana Cloud, etc.) for scale
+
+### Telemetry Best Practices
+- All operations are already instrumented with spans, metrics, and structured logs
+- Trace IDs are propagated across service boundaries
+- Error traces include exception details
+- Metrics include relevant dimensions (file type, bucket, subject, etc.)
 
 ## Troubleshooting
 
@@ -315,6 +440,17 @@ The system includes sample CSV files in the `samples/` directory that are automa
 **NATS connection issues:**
 - Ensure NATS is running: `docker-compose ps nats`
 - Check NATS logs: `docker-compose logs nats`
+
+**Observability services not accessible:**
+- Check if all observability services are running: `docker-compose ps tempo prometheus loki grafana otel-collector`
+- Verify OpenTelemetry Collector is receiving data: Check collector logs with `docker-compose logs otel-collector`
+- If Grafana shows no data, verify datasource configuration in Grafana UI
+
+**Importer service not generating data:**
+- Check the importer logs for errors
+- Verify configuration in `appsettings.json`
+- Ensure MinIO bucket exists and is accessible
+- Check NATS connection
 
 ## License
 

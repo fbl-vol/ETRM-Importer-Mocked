@@ -34,11 +34,17 @@ public class ImporterWorker : BackgroundService
         {
             _logger.LogInformation("ETRM Importer starting at: {time}", DateTimeOffset.Now);
 
+            // Find project root (go up from src/ETRM.Importer.Mock to repository root)
+            var projectDir = Directory.GetCurrentDirectory();
+            var repoRoot = Path.GetFullPath(Path.Combine(projectDir, "..", ".."));
+            
             // Import trades
-            await ImportFileAsync("samples/sample-trades.csv", "trades.csv", stoppingToken);
+            var tradesPath = Path.Combine(repoRoot, "samples", "sample-trades.csv");
+            await ImportFileAsync(tradesPath, "trades.csv", stoppingToken);
 
             // Import EOD prices
-            await ImportFileAsync("samples/sample-eod-prices.csv", "eod-prices.csv", stoppingToken);
+            var eodPath = Path.Combine(repoRoot, "samples", "sample-eod-prices.csv");
+            await ImportFileAsync(eodPath, "eod-prices.csv", stoppingToken);
 
             _logger.LogInformation("ETRM Importer completed successfully");
         }

@@ -81,9 +81,11 @@ public class NormalizerWorker : BackgroundService
         var config = new CsvConfiguration(CultureInfo.InvariantCulture)
         {
             HasHeaderRecord = true,
+            PrepareHeaderForMatch = args => args.Header.ToLower()
         };
 
         using var csv = new CsvReader(reader, config);
+        csv.Context.RegisterClassMap<TradeRecordMap>();
         var records = csv.GetRecords<TradeRecord>();
 
         var trades = new List<Trade>();
@@ -120,9 +122,11 @@ public class NormalizerWorker : BackgroundService
         var config = new CsvConfiguration(CultureInfo.InvariantCulture)
         {
             HasHeaderRecord = true,
+            PrepareHeaderForMatch = args => args.Header.ToLower()
         };
 
         using var csv = new CsvReader(reader, config);
+        csv.Context.RegisterClassMap<EodPriceRecordMap>();
         var records = csv.GetRecords<EodPriceRecord>();
 
         var prices = new List<EndOfDaySettlementPrice>();
@@ -186,5 +190,44 @@ public class NormalizerWorker : BackgroundService
         public string Currency { get; set; } = string.Empty;
         public string PriceSource { get; set; } = string.Empty;
         public string MarketZone { get; set; } = string.Empty;
+    }
+
+    private sealed class TradeRecordMap : CsvHelper.Configuration.ClassMap<TradeRecord>
+    {
+        public TradeRecordMap()
+        {
+            Map(m => m.TradeId).Name("trade_id");
+            Map(m => m.ContractId).Name("contract_id");
+            Map(m => m.CustomerId).Name("customer_id");
+            Map(m => m.BookId).Name("book_id");
+            Map(m => m.TraderId).Name("trader_id");
+            Map(m => m.DepartmentId).Name("department_id");
+            Map(m => m.TradeDate).Name("trade_date");
+            Map(m => m.TimeUpdated).Name("time_updated");
+            Map(m => m.Volume).Name("volume");
+            Map(m => m.Price).Name("price");
+            Map(m => m.Currency).Name("currency");
+            Map(m => m.Side).Name("side");
+            Map(m => m.CounterpartyId).Name("counterparty_id");
+            Map(m => m.DeliveryStart).Name("delivery_start");
+            Map(m => m.DeliveryEnd).Name("delivery_end");
+            Map(m => m.ProductType).Name("product_type");
+            Map(m => m.Source).Name("source");
+        }
+    }
+
+    private sealed class EodPriceRecordMap : CsvHelper.Configuration.ClassMap<EodPriceRecord>
+    {
+        public EodPriceRecordMap()
+        {
+            Map(m => m.ContractId).Name("contract_id");
+            Map(m => m.CustomerId).Name("customer_id");
+            Map(m => m.TradingPeriod).Name("trading_period");
+            Map(m => m.PublicationTime).Name("publication_time");
+            Map(m => m.Price).Name("price");
+            Map(m => m.Currency).Name("currency");
+            Map(m => m.PriceSource).Name("price_source");
+            Map(m => m.MarketZone).Name("market_zone");
+        }
     }
 }

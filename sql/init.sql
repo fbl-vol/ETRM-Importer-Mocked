@@ -3,7 +3,7 @@ CREATE EXTENSION IF NOT EXISTS timescaledb;
 
 -- trades table
 CREATE TABLE IF NOT EXISTS trades (
-  trade_id BIGINT PRIMARY KEY,
+  trade_id BIGINT NOT NULL,
   contract_id INT NOT NULL,
   customer_id INT NOT NULL,
   book_id INT NOT NULL,
@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS trades (
   delivery_start TIMESTAMP WITH TIME ZONE,
   delivery_end TIMESTAMP WITH TIME ZONE,
   product_type TEXT,
-  source TEXT
+  source TEXT,
+  PRIMARY KEY (trade_id, trade_date)
 );
 
 -- Convert trades to hypertable
@@ -27,7 +28,6 @@ SELECT create_hypertable('trades', 'trade_date', if_not_exists => TRUE);
 
 -- eod_prices table
 CREATE TABLE IF NOT EXISTS eod_prices (
-  id BIGSERIAL PRIMARY KEY,
   contract_id INT NOT NULL,
   customer_id INT,
   trading_period TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS eod_prices (
   price NUMERIC NOT NULL,
   currency TEXT,
   price_source TEXT,
-  market_zone TEXT
+  market_zone TEXT,
+  PRIMARY KEY (contract_id, customer_id, trading_period)
 );
 
 -- Convert eod_prices to hypertable

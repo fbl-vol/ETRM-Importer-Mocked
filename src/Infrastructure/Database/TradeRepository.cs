@@ -34,7 +34,7 @@ public class TradeRepository : ITradeRepository
                     @trade_date, @time_updated, @volume, @price, @currency, @side,
                     @counterparty_id, @delivery_start, @delivery_end, @product_type, @source
                 )
-                ON CONFLICT (trade_id) DO UPDATE SET
+                ON CONFLICT (trade_id, trade_date) DO UPDATE SET
                     time_updated = EXCLUDED.time_updated,
                     volume = EXCLUDED.volume,
                     price = EXCLUDED.price";

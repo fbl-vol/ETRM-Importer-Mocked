@@ -24,6 +24,26 @@ public class S3Client : IS3Client, IDisposable
         };
 
         _s3Client = new AmazonS3Client(_options.AccessKey, _options.SecretKey, config);
+        
+        // Ensure bucket exists
+        EnsureBucketExistsAsync().GetAwaiter().GetResult();
+    }
+
+    private async Task EnsureBucketExistsAsync()
+    {
+        try
+        {
+            await _s3Client.PutBucketAsync(_options.BucketName);
+            _logger.LogInformation("Created or verified bucket {Bucket}", _options.BucketName);
+        }
+        catch (AmazonS3Exception ex) when (ex.ErrorCode == "BucketAlreadyOwnedByYou")
+        {
+            _logger.LogDebug("Bucket {Bucket} already exists", _options.BucketName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not create bucket {Bucket}", _options.BucketName);
+        }
     }
 
     public async Task UploadFileAsync(string objectKey, Stream fileStream, string contentType, CancellationToken cancellationToken = default)

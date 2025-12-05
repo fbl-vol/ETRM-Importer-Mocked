@@ -1,8 +1,11 @@
+using System.Diagnostics;
 using Amazon.S3;
 using Amazon.S3.Model;
 using Infrastructure.Configuration;
+using Infrastructure.Observability;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using OpenTelemetry.Trace;
 
 namespace Infrastructure.S3;
 
@@ -49,8 +52,17 @@ public class S3Client : IS3Client, IDisposable
 
     public async Task UploadFileAsync(string objectKey, Stream fileStream, string contentType, CancellationToken cancellationToken = default)
     {
+        using var activity = Telemetry.ActivitySource.StartActivity("s3.upload", ActivityKind.Client);
+        activity?.SetTag("s3.bucket", _options.BucketName);
+        activity?.SetTag("s3.key", objectKey);
+        activity?.SetTag("s3.content_type", contentType);
+
+        var stopwatch = Stopwatch.StartNew();
         try
         {
+            var fileSize = fileStream.Length;
+            activity?.SetTag("s3.file_size", fileSize);
+
             var request = new PutObjectRequest
             {
                 BucketName = _options.BucketName,
@@ -60,11 +72,26 @@ public class S3Client : IS3Client, IDisposable
             };
 
             var response = await _s3Client.PutObjectAsync(request, cancellationToken);
-            _logger.LogInformation("Uploaded object {ObjectKey} to bucket {Bucket}", objectKey, _options.BucketName);
+            
+            stopwatch.Stop();
+            Telemetry.FileUploadDuration.Record(stopwatch.Elapsed.TotalSeconds,
+                new KeyValuePair<string, object?>("bucket", _options.BucketName));
+            Telemetry.FileSize.Record(fileSize,
+                new KeyValuePair<string, object?>("bucket", _options.BucketName));
+            Telemetry.FilesUploaded.Add(1,
+                new KeyValuePair<string, object?>("bucket", _options.BucketName));
+
+            _logger.LogInformation("Uploaded object {ObjectKey} to bucket {Bucket} ({Size} bytes) in {Duration}ms", 
+                objectKey, _options.BucketName, fileSize, stopwatch.ElapsedMilliseconds);
+            activity?.SetStatus(ActivityStatusCode.Ok);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to upload object {ObjectKey} to bucket {Bucket}", objectKey, _options.BucketName);
+            stopwatch.Stop();
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            activity?.AddException(ex);
+            _logger.LogError(ex, "Failed to upload object {ObjectKey} to bucket {Bucket} after {Duration}ms", 
+                objectKey, _options.BucketName, stopwatch.ElapsedMilliseconds);
             throw;
         }
     }

@@ -25,7 +25,8 @@ public class S3Client : IS3Client, IDisposable
 
         _s3Client = new AmazonS3Client(_options.AccessKey, _options.SecretKey, config);
         
-        // Ensure bucket exists
+        // NOTE: Using GetAwaiter().GetResult() for simplicity in this demo.
+        // For production, consider using a factory pattern or lazy initialization to avoid potential deadlocks.
         EnsureBucketExistsAsync().GetAwaiter().GetResult();
     }
 

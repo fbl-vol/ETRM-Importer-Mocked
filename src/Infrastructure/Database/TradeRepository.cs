@@ -22,6 +22,7 @@ public class TradeRepository : ITradeRepository
         await using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken);
 
+        // NOTE: For production with large datasets, consider using batch operations or COPY for better performance
         foreach (var trade in trades)
         {
             const string sql = @"

@@ -22,6 +22,7 @@ public class PositionRepository : IPositionRepository
         await using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken);
 
+        // NOTE: For production with large datasets, consider using batch operations for better performance
         foreach (var position in positions)
         {
             const string sql = @"

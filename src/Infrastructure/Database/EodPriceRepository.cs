@@ -22,6 +22,7 @@ public class EodPriceRepository : IEodPriceRepository
         await using var connection = new NpgsqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken);
 
+        // NOTE: For production with large datasets, consider using batch operations or COPY for better performance
         foreach (var price in prices)
         {
             const string sql = @"
